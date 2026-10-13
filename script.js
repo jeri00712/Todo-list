@@ -1,618 +1,314 @@
-/* =========================================
-   JAVASCRIPT TO-DO LIST
-   Task 3 - Thiranex Internship
-   ========================================= */
+// ==========================================
+// TO-DO LIST
+// ==========================================
 
+const STORAGE_KEY = "todoTasks";
+const LEGACY_KEY = "jeriTodoTasks"; // data saved by the earlier portfolio version
+const EXIT_TIME = 300;              // must match the item-out animation
 
-/* =========================================
-   ELEMENTS
-   ========================================= */
+// ------------------------------------------
+// ELEMENTS
+// ------------------------------------------
 
 const todoForm = document.getElementById("todo-form");
-
 const todoInput = document.getElementById("todo-input");
-
 const submitButton = document.getElementById("submit-btn");
-
 const todoList = document.getElementById("todo-list");
+const emptyMessage = document.getElementById("empty-message");
+const taskCount = document.getElementById("task-count");
+const clearCompletedButton = document.getElementById("clear-completed");
+const filterButtons = document.querySelectorAll(".filter-btn");
 
-const emptyMessage =
-    document.getElementById("empty-message");
-
-const taskCount =
-    document.getElementById("task-count");
-
-const clearCompletedButton =
-    document.getElementById("clear-completed");
-
-const filterButtons =
-    document.querySelectorAll(".filter-btn");
-
-
-/* =========================================
-   APPLICATION STATE
-   ========================================= */
+// ------------------------------------------
+// STATE
+// ------------------------------------------
 
 let tasks = [];
-
 let editingTaskId = null;
-
 let currentFilter = "all";
+let newTaskId = null; // only the newest task plays the "enter" animation
 
-
-/* =========================================
-   LOAD TASKS
-   ========================================= */
+// ------------------------------------------
+// STORAGE
+// ------------------------------------------
 
 function loadTasks() {
-
     try {
+        const saved =
+            localStorage.getItem(STORAGE_KEY) ||
+            localStorage.getItem(LEGACY_KEY);
 
-        const savedTasks =
-            localStorage.getItem("jeriTodoTasks");
-
-        if (savedTasks) {
-
-            tasks = JSON.parse(savedTasks);
-
-        }
-
+        const parsed = saved ? JSON.parse(saved) : [];
+        tasks = Array.isArray(parsed) ? parsed : [];
     } catch (error) {
-
-        console.error(
-            "Unable to load tasks:",
-            error
-        );
-
+        console.error("Unable to load tasks:", error);
         tasks = [];
     }
 }
 
-
-/* =========================================
-   SAVE TASKS
-   ========================================= */
-
 function saveTasks() {
-
     try {
-
-        localStorage.setItem(
-            "jeriTodoTasks",
-            JSON.stringify(tasks)
-        );
-
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     } catch (error) {
-
-        console.error(
-            "Unable to save tasks:",
-            error
-        );
+        console.error("Unable to save tasks:", error);
     }
 }
 
-
-/* =========================================
-   CREATE TASK ID
-   ========================================= */
+// ------------------------------------------
+// HELPERS
+// ------------------------------------------
 
 function createTaskId() {
-
-    return Date.now().toString() +
-        Math.random().toString(16).slice(2);
-
+    return Date.now().toString() + Math.random().toString(16).slice(2);
 }
 
+function findTask(id) {
+    return tasks.find((task) => task.id === id);
+}
 
-/* =========================================
-   FORM SUBMISSION
-   ========================================= */
+function matchesFilter(task) {
+    if (currentFilter === "active") return !task.completed;
+    if (currentFilter === "completed") return task.completed;
+    return true;
+}
 
-todoForm.addEventListener(
-    "submit",
-    function (event) {
+function stopEditing() {
+    editingTaskId = null;
+    submitButton.textContent = "Add";
+    todoInput.value = "";
+}
 
-        event.preventDefault();
+// Plays the exit animation, then runs the callback
+function removeWithAnimation(listItem, done) {
+    listItem.classList.add("removing");
+    setTimeout(done, EXIT_TIME);
+}
 
-        const taskText =
-            todoInput.value.trim();
+// ------------------------------------------
+// ADD / UPDATE TASK
+// ------------------------------------------
 
+todoForm.addEventListener("submit", (event) => {
+    event.preventDefault();
 
-        if (!taskText) {
+    const text = todoInput.value.trim();
+    if (!text) return;
 
-            return;
-        }
-
-
-        /* UPDATE EXISTING TASK */
-
-        if (editingTaskId !== null) {
-
-            const task =
-                tasks.find(
-                    item =>
-                        item.id === editingTaskId
-                );
-
-
-            if (task) {
-
-                task.text = taskText;
-
-            }
-
-
-            editingTaskId = null;
-
-            submitButton.textContent =
-                "Add Task";
-
-        }
-
-
-        /* CREATE NEW TASK */
-
-        else {
-
-            const newTask = {
-
-                id: createTaskId(),
-
-                text: taskText,
-
-                completed: false
-
-            };
-
-
-            tasks.push(newTask);
-
-        }
-
-
-        saveTasks();
-
+    if (editingTaskId !== null) {
+        const task = findTask(editingTaskId);
+        if (task) task.text = text;
+        stopEditing();
+    } else {
+        const task = { id: createTaskId(), text, completed: false };
+        tasks.push(task);
+        newTaskId = task.id;
         todoInput.value = "";
-
-        renderTasks();
-
-        todoInput.focus();
-
     }
-);
 
+    saveTasks();
+    renderTasks();
+    todoInput.focus();
+});
 
-/* =========================================
-   RENDER TASKS
-   ========================================= */
+// ------------------------------------------
+// RENDER
+// ------------------------------------------
+
+function createTaskElement(task) {
+    const li = document.createElement("li");
+    li.className = "todo-item";
+    li.dataset.id = task.id;
+
+    if (task.completed) li.classList.add("completed");
+    if (task.id === newTaskId) li.classList.add("enter");
+    if (task.id === editingTaskId) li.classList.add("editing");
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "todo-checkbox";
+    checkbox.checked = task.completed;
+    checkbox.setAttribute("aria-label", `Mark ${task.text} as complete`);
+
+    const text = document.createElement("span");
+    text.className = "todo-text";
+    text.textContent = task.text;
+
+    const actions = document.createElement("div");
+    actions.className = "todo-actions";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "edit-btn";
+    editButton.dataset.action = "edit";
+    editButton.textContent = "Edit";
+    editButton.setAttribute("aria-label", `Edit ${task.text}`);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-btn";
+    deleteButton.dataset.action = "delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.setAttribute("aria-label", `Delete ${task.text}`);
+
+    actions.append(editButton, deleteButton);
+    li.append(checkbox, text, actions);
+
+    return li;
+}
 
 function renderTasks() {
-
     todoList.textContent = "";
 
+    const visibleTasks = tasks.filter(matchesFilter);
 
-    let filteredTasks = tasks;
+    emptyMessage.classList.toggle("hidden", visibleTasks.length > 0);
 
-
-    /* FILTER TASKS */
-
-    if (currentFilter === "active") {
-
-        filteredTasks =
-            tasks.filter(
-                task => !task.completed
-            );
-
+    if (visibleTasks.length === 0) {
+        emptyMessage.textContent =
+            tasks.length === 0
+                ? "No tasks yet. Add your first one above."
+                : `No ${currentFilter} tasks.`;
     }
 
+    visibleTasks.forEach((task) => {
+        todoList.appendChild(createTaskElement(task));
+    });
 
-    if (currentFilter === "completed") {
-
-        filteredTasks =
-            tasks.filter(
-                task => task.completed
-            );
-
-    }
-
-
-    /* EMPTY STATE */
-
-    if (filteredTasks.length === 0) {
-
-        emptyMessage.classList.remove("hidden");
-
-    } else {
-
-        emptyMessage.classList.add("hidden");
-
-    }
-
-
-    /* CREATE TASK ELEMENTS */
-
-    filteredTasks.forEach(
-        task => {
-
-            const listItem =
-                document.createElement("li");
-
-            listItem.className =
-                "todo-item";
-
-            listItem.dataset.id =
-                task.id;
-
-
-            if (task.completed) {
-
-                listItem.classList.add(
-                    "completed"
-                );
-
-            }
-
-
-            /* CHECKBOX */
-
-            const checkbox =
-                document.createElement("input");
-
-            checkbox.type = "checkbox";
-
-            checkbox.className =
-                "todo-checkbox";
-
-            checkbox.checked =
-                task.completed;
-
-            checkbox.setAttribute(
-                "aria-label",
-                `Mark ${task.text} as complete`
-            );
-
-
-            /* TEXT */
-
-            const text =
-                document.createElement("span");
-
-            text.className =
-                "todo-text";
-
-            text.textContent =
-                task.text;
-
-
-            /* ACTION CONTAINER */
-
-            const actions =
-                document.createElement("div");
-
-            actions.className =
-                "todo-actions";
-
-
-            /* EDIT BUTTON */
-
-            const editButton =
-                document.createElement("button");
-
-            editButton.type = "button";
-
-            editButton.className =
-                "edit-btn";
-
-            editButton.dataset.action =
-                "edit";
-
-            editButton.textContent =
-                "Edit";
-
-            editButton.setAttribute(
-                "aria-label",
-                `Edit ${task.text}`
-            );
-
-
-            /* DELETE BUTTON */
-
-            const deleteButton =
-                document.createElement("button");
-
-            deleteButton.type = "button";
-
-            deleteButton.className =
-                "delete-btn";
-
-            deleteButton.dataset.action =
-                "delete";
-
-            deleteButton.textContent =
-                "Delete";
-
-            deleteButton.setAttribute(
-                "aria-label",
-                `Delete ${task.text}`
-            );
-
-
-            actions.append(
-                editButton,
-                deleteButton
-            );
-
-
-            listItem.append(
-                checkbox,
-                text,
-                actions
-            );
-
-
-            todoList.appendChild(
-                listItem
-            );
-
-        }
-    );
-
-
+    newTaskId = null;
     updateTaskCount();
-
 }
-
-
-/* =========================================
-   CHECKBOX EVENT
-   EVENT DELEGATION
-   ========================================= */
-
-todoList.addEventListener(
-    "change",
-    function (event) {
-
-        if (
-            !event.target.classList.contains(
-                "todo-checkbox"
-            )
-        ) {
-
-            return;
-        }
-
-
-        const listItem =
-            event.target.closest(".todo-item");
-
-        const taskId =
-            listItem.dataset.id;
-
-
-        const task =
-            tasks.find(
-                item =>
-                    item.id === taskId
-            );
-
-
-        if (!task) {
-
-            return;
-        }
-
-
-        task.completed =
-            event.target.checked;
-
-
-        saveTasks();
-
-        renderTasks();
-
-    }
-);
-
-
-/* =========================================
-   EDIT / DELETE EVENTS
-   EVENT DELEGATION
-   ========================================= */
-
-todoList.addEventListener(
-    "click",
-    function (event) {
-
-        const button =
-            event.target.closest("button");
-
-
-        if (!button) {
-
-            return;
-        }
-
-
-        const listItem =
-            button.closest(".todo-item");
-
-
-        if (!listItem) {
-
-            return;
-        }
-
-
-        const taskId =
-            listItem.dataset.id;
-
-
-        const action =
-            button.dataset.action;
-
-
-        /* EDIT */
-
-        if (action === "edit") {
-
-            const task =
-                tasks.find(
-                    item =>
-                        item.id === taskId
-                );
-
-
-            if (!task) {
-
-                return;
-            }
-
-
-            todoInput.value =
-                task.text;
-
-
-            editingTaskId =
-                task.id;
-
-
-            submitButton.textContent =
-                "Update Task";
-
-
-            todoInput.focus();
-
-        }
-
-
-        /* DELETE */
-
-        if (action === "delete") {
-
-            tasks =
-                tasks.filter(
-                    task =>
-                        task.id !== taskId
-                );
-
-
-            if (
-                editingTaskId === taskId
-            ) {
-
-                editingTaskId = null;
-
-                submitButton.textContent =
-                    "Add Task";
-
-                todoInput.value = "";
-
-            }
-
-
-            saveTasks();
-
-            renderTasks();
-
-        }
-
-    }
-);
-
-
-/* =========================================
-   FILTER BUTTONS
-   ========================================= */
-
-filterButtons.forEach(
-    button => {
-
-        button.addEventListener(
-            "click",
-            function () {
-
-                currentFilter =
-                    button.dataset.filter;
-
-
-                filterButtons.forEach(
-                    item => {
-
-                        item.classList.remove(
-                            "active"
-                        );
-
-                    }
-                );
-
-
-                button.classList.add(
-                    "active"
-                );
-
-
-                renderTasks();
-
-            }
-        );
-
-    }
-);
-
-
-/* =========================================
-   CLEAR COMPLETED
-   ========================================= */
-
-clearCompletedButton.addEventListener(
-    "click",
-    function () {
-
-        tasks =
-            tasks.filter(
-                task => !task.completed
-            );
-
-
-        saveTasks();
-
-        renderTasks();
-
-    }
-);
-
-
-/* =========================================
-   UPDATE TASK COUNT
-   ========================================= */
 
 function updateTaskCount() {
+    const active = tasks.filter((task) => !task.completed).length;
+    const label = active === 1 ? "1 active task" : `${active} active tasks`;
 
-    const activeTasks =
-        tasks.filter(
-            task => !task.completed
-        ).length;
-
-
-    if (activeTasks === 1) {
-
-        taskCount.textContent =
-            "1 active task";
-
-    } else {
-
-        taskCount.textContent =
-            `${activeTasks} active tasks`;
-
+    if (taskCount.textContent !== label) {
+        taskCount.textContent = label;
+        taskCount.classList.remove("bump");
+        void taskCount.offsetWidth;
+        taskCount.classList.add("bump");
     }
-
 }
 
+// ------------------------------------------
+// COMPLETE / UNCOMPLETE
+// ------------------------------------------
 
-/* =========================================
-   INITIALIZE APPLICATION
-   ========================================= */
+todoList.addEventListener("change", (event) => {
+    if (!event.target.classList.contains("todo-checkbox")) return;
+
+    const listItem = event.target.closest(".todo-item");
+    const task = findTask(listItem.dataset.id);
+    if (!task) return;
+
+    task.completed = event.target.checked;
+    saveTasks();
+
+    // Update in place so the check + strike-through can animate
+    listItem.classList.toggle("completed", task.completed);
+    updateTaskCount();
+
+    // If the current filter no longer shows this task, slide it out
+    if (!matchesFilter(task)) {
+        setTimeout(() => {
+            removeWithAnimation(listItem, renderTasks);
+        }, 350);
+    }
+});
+
+// ------------------------------------------
+// EDIT / DELETE
+// ------------------------------------------
+
+todoList.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+
+    const listItem = button.closest(".todo-item");
+    if (!listItem) return;
+
+    const taskId = listItem.dataset.id;
+    const action = button.dataset.action;
+
+    if (action === "edit") {
+        const task = findTask(taskId);
+        if (!task) return;
+
+        editingTaskId = task.id;
+        todoInput.value = task.text;
+        submitButton.textContent = "Update";
+        todoInput.focus();
+        todoInput.select();
+
+        document.querySelectorAll(".todo-item.editing")
+            .forEach((item) => item.classList.remove("editing"));
+        listItem.classList.add("editing");
+    }
+
+    if (action === "delete") {
+        removeWithAnimation(listItem, () => {
+            tasks = tasks.filter((task) => task.id !== taskId);
+
+            if (editingTaskId === taskId) stopEditing();
+
+            saveTasks();
+            renderTasks();
+        });
+    }
+});
+
+// Esc cancels editing
+todoInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && editingTaskId !== null) {
+        stopEditing();
+        renderTasks();
+    }
+});
+
+// ------------------------------------------
+// FILTERS
+// ------------------------------------------
+
+filterButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        currentFilter = button.dataset.filter;
+
+        filterButtons.forEach((item) => {
+            item.classList.toggle("active", item === button);
+        });
+
+        renderTasks();
+    });
+});
+
+// ------------------------------------------
+// CLEAR COMPLETED
+// ------------------------------------------
+
+clearCompletedButton.addEventListener("click", () => {
+    const doneItems = [...todoList.querySelectorAll(".todo-item.completed")];
+
+    const finish = () => {
+        tasks = tasks.filter((task) => !task.completed);
+
+        if (editingTaskId !== null && !findTask(editingTaskId)) stopEditing();
+
+        saveTasks();
+        renderTasks();
+    };
+
+    if (doneItems.length === 0) {
+        finish();
+        return;
+    }
+
+    doneItems.forEach((item) => item.classList.add("removing"));
+    setTimeout(finish, EXIT_TIME);
+});
+
+// ------------------------------------------
+// START
+// ------------------------------------------
 
 loadTasks();
-
 renderTasks();
