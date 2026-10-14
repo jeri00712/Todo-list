@@ -3,21 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A minimalist to-do list built with HTML, CSS and JavaScript.">
+    <meta name="description" content="An elegant to-do list built with HTML, CSS and JavaScript.">
+    <meta name="theme-color" content="#0b0b14">
     <title>To-Do List</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+    <!-- Animated background -->
+    <div class="bg" aria-hidden="true">
+        <span class="orb orb-1"></span>
+        <span class="orb orb-2"></span>
+        <span class="orb orb-3"></span>
+    </div>
+
+    <canvas id="confetti" aria-hidden="true"></canvas>
+
     <main class="app">
 
         <header class="intro">
-            <p class="eyebrow">Tasks</p>
-            <h1>To-Do List</h1>
-            <p class="subtitle">Organize your tasks and stay productive.</p>
+            <p class="eyebrow" id="greeting">Today</p>
+            <h1>My <span>Tasks</span></h1>
+            <p class="subtitle">Organize your day and stay productive.</p>
         </header>
 
         <section class="card" aria-label="Task manager">
+
+            <!-- Progress -->
+            <div class="progress">
+                <div class="progress-top">
+                    <span id="progress-text">0 of 0 done</span>
+                    <strong id="progress-percent">0%</strong>
+                </div>
+                <div class="bar"><span id="progress-fill"></span></div>
+            </div>
 
             <!-- Add / Edit -->
             <form id="todo-form" class="todo-form">
@@ -25,7 +48,7 @@
                 <input
                     type="text"
                     id="todo-input"
-                    placeholder="Add a new task…"
+                    placeholder="What needs to be done?"
                     autocomplete="off"
                     maxlength="200"
                     required
@@ -35,6 +58,7 @@
 
             <!-- Filters -->
             <div class="filters" role="group" aria-label="Task filters">
+                <span class="filter-pill" aria-hidden="true"></span>
                 <button type="button" class="filter-btn active" data-filter="all">All</button>
                 <button type="button" class="filter-btn" data-filter="active">Active</button>
                 <button type="button" class="filter-btn" data-filter="completed">Completed</button>
@@ -43,7 +67,10 @@
             <!-- List -->
             <ul id="todo-list" class="todo-list" aria-live="polite"></ul>
 
-            <p id="empty-message" class="empty-message">No tasks yet. Add your first one above.</p>
+            <div id="empty-message" class="empty-message">
+                <span class="empty-icon">✨</span>
+                <p id="empty-text">No tasks yet. Add your first one above.</p>
+            </div>
 
             <!-- Footer -->
             <div class="todo-footer">

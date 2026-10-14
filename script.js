@@ -3,21 +3,29 @@
 // ==========================================
 
 const STORAGE_KEY = "todoTasks";
-const LEGACY_KEY = "jeriTodoTasks"; // data saved by the earlier portfolio version
-const EXIT_TIME = 300;              // must match the item-out animation
+const LEGACY_KEY = "jeriTodoTasks"; // tasks saved by the earlier portfolio version
+const EXIT_TIME = 320;              // must match the item-out animation
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ------------------------------------------
 // ELEMENTS
 // ------------------------------------------
 
+const greeting = document.getElementById("greeting");
 const todoForm = document.getElementById("todo-form");
 const todoInput = document.getElementById("todo-input");
 const submitButton = document.getElementById("submit-btn");
 const todoList = document.getElementById("todo-list");
 const emptyMessage = document.getElementById("empty-message");
+const emptyText = document.getElementById("empty-text");
 const taskCount = document.getElementById("task-count");
 const clearCompletedButton = document.getElementById("clear-completed");
+const filtersBox = document.querySelector(".filters");
 const filterButtons = document.querySelectorAll(".filter-btn");
+const progressText = document.getElementById("progress-text");
+const progressPercent = document.getElementById("progress-percent");
+const progressFill = document.getElementById("progress-fill");
 
 // ------------------------------------------
 // STATE
@@ -26,7 +34,7 @@ const filterButtons = document.querySelectorAll(".filter-btn");
 let tasks = [];
 let editingTaskId = null;
 let currentFilter = "all";
-let newTaskId = null; // only the newest task plays the "enter" animation
+let newTaskId = null; // the newest task plays the "enter" animation
 
 // ------------------------------------------
 // STORAGE
@@ -58,13 +66,10 @@ function saveTasks() {
 // HELPERS
 // ------------------------------------------
 
-function createTaskId() {
-    return Date.now().toString() + Math.random().toString(16).slice(2);
-}
+const createTaskId = () =>
+    Date.now().toString() + Math.random().toString(16).slice(2);
 
-function findTask(id) {
-    return tasks.find((task) => task.id === id);
-}
+const findTask = (id) => tasks.find((task) => task.id === id);
 
 function matchesFilter(task) {
     if (currentFilter === "active") return !task.completed;
@@ -78,11 +83,96 @@ function stopEditing() {
     todoInput.value = "";
 }
 
-// Plays the exit animation, then runs the callback
 function removeWithAnimation(listItem, done) {
     listItem.classList.add("removing");
-    setTimeout(done, EXIT_TIME);
+    setTimeout(done, reduceMotion ? 0 : EXIT_TIME);
 }
+
+function setGreeting() {
+    const hour = new Date().getHours();
+
+    greeting.textContent =
+        hour < 12 ? "Good morning" :
+        hour < 18 ? "Good afternoon" :
+        "Good evening";
+}
+
+// ------------------------------------------
+// CONFETTI (fires when every task is done)
+// ------------------------------------------
+
+const confettiCanvas = document.getElementById("confetti");
+const ctx = confettiCanvas.getContext("2d");
+const confettiColors = ["#7c5cff", "#22d3ee", "#f472b6", "#34d399", "#fbbf24", "#ffffff"];
+
+let particles = [];
+let confettiFrame = null;
+
+function resizeCanvas() {
+    const ratio = window.devicePixelRatio || 1;
+    confettiCanvas.width = window.innerWidth * ratio;
+    confettiCanvas.height = window.innerHeight * ratio;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+}
+
+function launchConfetti(count) {
+    if (reduceMotion) return;
+
+    const originX = window.innerWidth / 2;
+    const originY = window.innerHeight * 0.4;
+
+    for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+        const speed = 6 + Math.random() * 10;
+
+        particles.push({
+            x: originX,
+            y: originY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 5 + Math.random() * 6,
+            rotation: Math.random() * Math.PI,
+            spin: (Math.random() - 0.5) * 0.35,
+            color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+            alpha: 1
+        });
+    }
+
+    if (!confettiFrame) confettiFrame = requestAnimationFrame(drawConfetti);
+}
+
+function drawConfetti() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    particles = particles.filter((p) => p.alpha > 0 && p.y < window.innerHeight + 30);
+
+    particles.forEach((p) => {
+        p.vy += 0.3;
+        p.vx *= 0.99;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rotation += p.spin;
+        p.alpha -= 0.007;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.alpha, 0);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        ctx.restore();
+    });
+
+    if (particles.length > 0) {
+        confettiFrame = requestAnimationFrame(drawConfetti);
+    } else {
+        confettiFrame = null;
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
 // ------------------------------------------
 // ADD / UPDATE TASK
@@ -114,14 +204,20 @@ todoForm.addEventListener("submit", (event) => {
 // RENDER
 // ------------------------------------------
 
-function createTaskElement(task) {
+function createTaskElement(task, index, stagger) {
     const li = document.createElement("li");
     li.className = "todo-item";
     li.dataset.id = task.id;
 
     if (task.completed) li.classList.add("completed");
-    if (task.id === newTaskId) li.classList.add("enter");
     if (task.id === editingTaskId) li.classList.add("editing");
+
+    if (stagger) {
+        li.classList.add("enter");
+        li.style.setProperty("--i", index);
+    } else if (task.id === newTaskId) {
+        li.classList.add("enter");
+    }
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -156,7 +252,8 @@ function createTaskElement(task) {
     return li;
 }
 
-function renderTasks() {
+// stagger = true plays a cascading entrance for every visible task
+function renderTasks(stagger = false) {
     todoList.textContent = "";
 
     const visibleTasks = tasks.filter(matchesFilter);
@@ -164,22 +261,30 @@ function renderTasks() {
     emptyMessage.classList.toggle("hidden", visibleTasks.length > 0);
 
     if (visibleTasks.length === 0) {
-        emptyMessage.textContent =
+        emptyText.textContent =
             tasks.length === 0
                 ? "No tasks yet. Add your first one above."
                 : `No ${currentFilter} tasks.`;
     }
 
-    visibleTasks.forEach((task) => {
-        todoList.appendChild(createTaskElement(task));
+    visibleTasks.forEach((task, index) => {
+        todoList.appendChild(createTaskElement(task, index, stagger));
     });
 
     newTaskId = null;
-    updateTaskCount();
+    updateStats();
 }
 
-function updateTaskCount() {
-    const active = tasks.filter((task) => !task.completed).length;
+function updateStats() {
+    const total = tasks.length;
+    const done = tasks.filter((task) => task.completed).length;
+    const active = total - done;
+    const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+    progressText.textContent = `${done} of ${total} done`;
+    progressPercent.textContent = `${percent}%`;
+    progressFill.style.width = `${percent}%`;
+
     const label = active === 1 ? "1 active task" : `${active} active tasks`;
 
     if (taskCount.textContent !== label) {
@@ -204,15 +309,26 @@ todoList.addEventListener("change", (event) => {
     task.completed = event.target.checked;
     saveTasks();
 
-    // Update in place so the check + strike-through can animate
+    // Update in place so the tick, ring and strike-through can animate
     listItem.classList.toggle("completed", task.completed);
-    updateTaskCount();
+
+    if (task.completed) {
+        listItem.classList.add("pop");
+        setTimeout(() => listItem.classList.remove("pop"), 650);
+    }
+
+    updateStats();
+
+    // Everything finished — celebrate
+    if (task.completed && tasks.every((item) => item.completed)) {
+        launchConfetti(130);
+    }
 
     // If the current filter no longer shows this task, slide it out
     if (!matchesFilter(task)) {
         setTimeout(() => {
-            removeWithAnimation(listItem, renderTasks);
-        }, 350);
+            removeWithAnimation(listItem, () => renderTasks());
+        }, 450);
     }
 });
 
@@ -269,7 +385,7 @@ todoInput.addEventListener("keydown", (event) => {
 // FILTERS
 // ------------------------------------------
 
-filterButtons.forEach((button) => {
+filterButtons.forEach((button, index) => {
     button.addEventListener("click", () => {
         currentFilter = button.dataset.filter;
 
@@ -277,7 +393,10 @@ filterButtons.forEach((button) => {
             item.classList.toggle("active", item === button);
         });
 
-        renderTasks();
+        // Slide the highlight pill under the selected filter
+        filtersBox.style.setProperty("--pill-x", `${index * 100}%`);
+
+        renderTasks(true);
     });
 });
 
@@ -302,13 +421,18 @@ clearCompletedButton.addEventListener("click", () => {
         return;
     }
 
-    doneItems.forEach((item) => item.classList.add("removing"));
-    setTimeout(finish, EXIT_TIME);
+    doneItems.forEach((item, i) => {
+        item.style.animationDelay = `${i * 50}ms`;
+        item.classList.add("removing");
+    });
+
+    setTimeout(finish, (reduceMotion ? 0 : EXIT_TIME) + doneItems.length * 50);
 });
 
 // ------------------------------------------
 // START
 // ------------------------------------------
 
+setGreeting();
 loadTasks();
-renderTasks();
+renderTasks(true);
